@@ -1,0 +1,31 @@
+{
+  "name": "ncloud",
+  "version": "1.0.3",
+  "description": "Node based cloud",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "build": "rm -f ncloud-*.tgz && npm pack && cp ncloud-*.tgz public/ncloud.tgz"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "connect": "^3.7.0",
+    "moment": "^2.24.0",
+    "serve-static": "^1.14.1",
+    "socket.io": "^2.3.0",
+    "socket.io-stream": "^0.9.1",
+    "sqlite3": "^4.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.2"
+  },
+  "files": [
+    "config.json",
+    "index.js",
+    "package.json",
+    "README.md",
+    "modules/"
+  ]
+}
