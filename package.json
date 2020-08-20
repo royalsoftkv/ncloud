@@ -1,6 +1,6 @@
 {
   "name": "ncloud",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Node based cloud",
   "main": "index.js",
   "scripts": {
