@@ -6,6 +6,7 @@ const server = http.createServer();
 const config = require('./config.json');
 var socketHandler = require("./modules/socketHandler");
 var clientsRegistry = require("./modules/clientsRegistry");
+const dbHandler = require("./modules/dbHandler");
 
 global.initList = function() {
     return {
