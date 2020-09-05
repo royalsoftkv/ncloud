@@ -4,7 +4,8 @@ const stream = require('stream');
 let clients = {};
 
 let clientsStream = new stream.Readable({
-    read() {}
+    read() {},
+    objectMode: true
 })
 
 module.exports = {
@@ -56,7 +57,7 @@ module.exports = {
     },
 
     updateClientsStream() {
-        clientsStream.push(JSON.stringify(this.getClientsList()))
+        clientsStream.push(this.getClientsList())
     },
 
     getClientsStream() {

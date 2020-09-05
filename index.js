@@ -170,13 +170,13 @@ server.listen(config.port, config.host, () => {
                     }
                     return;
                 }
-                let nodeStream = ss.createStream();
+                let nodeStream = ss.createStream({objectMode: true});
                 nodeStream.pipe(stream);
                 ss(nodeSocket).emit('streamMessage', nodeStream, msg, typeof ack === "function" ? function(res){
                     ack(res);
                 } : null);
                 nodeStream.on('data', function(data){
-                    console.log(`Transfered: ${data.toString()} connected=${stream.socket.sio.connected}`);
+                    console.log(`Transfered: ${JSON.stringify(data)} connected=${stream.socket.sio.connected}`);
                 });
                 stream.on('unpipe', function() {
                     console.log('unpipe');

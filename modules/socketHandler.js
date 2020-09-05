@@ -158,7 +158,7 @@ module.exports = (socket) => {
             return;
         }
 
-        let deviceStream = ss.createStream();
+        let deviceStream = ss.createStream({objectMode:true});
         deviceStream.pipe(stream);
 
         stream.on('unpipe', function () {
