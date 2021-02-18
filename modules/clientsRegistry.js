@@ -57,7 +57,10 @@ module.exports = {
     },
 
     updateClientsStream() {
-        clientsStream.push(this.getClientsList())
+        if(clientsStream._readableState.pipesCount > 0) {
+            clientsStream.push(this.getClientsList())
+        }
+        // global.aedes.publish({topic:'clients', payload: JSON.stringify(this.getClientsList())})
     },
 
     getClientsStream() {

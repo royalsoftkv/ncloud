@@ -4,7 +4,7 @@
   "description": "Node based cloud",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon index.js",
+    "dev": "node index.js",
     "build": "rm -f ncloud-*.tgz && npm pack && cp ncloud-*.tgz public/ncloud.tgz"
   },
   "keywords": [],
@@ -12,15 +12,15 @@
   "license": "ISC",
   "dependencies": {
     "connect": "^3.7.0",
-    "moment": "^2.24.0",
+    "moment": "^2.29.1",
     "serve-static": "^1.14.1",
     "socket.io": "^2.3.0",
     "socket.io-stream": "^0.9.1",
     "sqlite3": "^4.1.1",
-    "aedes": "^0.44.0"
+    "websocket-stream": "^5.5.2"
   },
   "devDependencies": {
-    "nodemon": "^2.0.2"
+    "nodemon": "^2.0.6"
   },
   "files": [
     "config.json",

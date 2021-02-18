@@ -4,15 +4,14 @@ const ss = require('socket.io-stream');
 
 const server = http.createServer();
 const config = require('./config.json');
-var socketHandler = require("./modules/socketHandler");
-var clientsRegistry = require("./modules/clientsRegistry");
+const socketHandler = require("./modules/socketHandler");
+const clientsRegistry = require("./modules/clientsRegistry");
 const dbHandler = require("./modules/dbHandler");
-const mqttServer = require("./modules/mqttServer")
-
-global.initList = function() {
-    return {
-        allowedIps: config.allowedIps
-    }
+global.initList = function(params, cb) {
+    cb({
+        allowedIps: config.allowedIps,
+        clients: clientsRegistry.getClientsList()
+    })
 };
 
 global.listClients = function(stream, params, ack) {
@@ -69,17 +68,6 @@ function procesMessage(Handler, msg, ack) {
     }
 }
 
-function procesStreamMessage(Handler, stream, msg) {
-    let fn = Handler[msg.method];
-    if (typeof Handler !== 'undefined' && typeof fn === "undefined") {
-        fn = Handler[msg.method];
-    }
-    if (typeof fn === "function") {
-        fn(stream, msg);
-    } else {
-        console.warn(`Not found function for stream ${msg.method}`);
-    }
-}
 
 function checkManualAck(socket, msg, ack) {
     if(!msg.callbackId) {
@@ -132,59 +120,6 @@ server.listen(config.port, config.host, () => {
         });
         socketHandler(socket);
 
-        socket.on('message1', (msg, ack) => {
-            console.log(`Received message from=${msg.from} to=${msg.to} method=${msg.method} params=${JSON.stringify(msg.payload)}`);
-            ack = checkManualAck(socket,msg,ack);
-            //console.log(`Received message from=${msg.from} to=${msg.to} message=${msg.message} params=${JSON.stringify(msg.params)}`);
-            if (typeof msg.to === 'undefined') {
-                //This is local message
-                procesMessage(Handler, msg, typeof ack === 'function' ? function(res) {
-                    ack(res);
-                } : null);
-            } else {
-                let targetNode = msg.to;
-                let nodeSocket = findNodSocketeById(targetNode);
-                if (nodeSocket === null) {
-                    console.warn(`Not found socket for node with name ${targetNode}`);
-                    if(typeof ack === 'function') {
-                        ack({error:true, message: `Not found socket for node with name ${targetNode}`});
-                    }
-                    return;
-                }
-                nodeSocket.emit("message", msg, (typeof ack === 'function') ? function (res) {
-                    ack(res);
-                } : null);
-            }
-        });
-
-        ss(socket).on('streamMessage1', function(stream, msg, ack) {
-            console.log(`Received stream message from=${msg.from} to=${msg.to} method=${msg.method} params=${JSON.stringify(msg.payload)}`);
-            if (typeof msg.to === 'undefined') {
-                procesStreamMessage(Handler, stream, msg);
-            } else {
-                let targetNode = msg.to;
-                let nodeSocket = findNodSocketeById(targetNode);
-                if (nodeSocket === null) {
-                    console.warn(`Not found socket for node with name ${targetNode}`);
-                    if(typeof ack === 'function') {
-                        ack({error:true, message: `Not found socket for node with name ${targetNode}`});
-                    }
-                    return;
-                }
-                let nodeStream = ss.createStream({objectMode: true});
-                nodeStream.pipe(stream);
-                ss(nodeSocket).emit('streamMessage', nodeStream, msg, typeof ack === "function" ? function(res){
-                    ack(res);
-                } : null);
-                nodeStream.on('data', function(data){
-                    console.log(`Transfered: ${JSON.stringify(data)} connected=${stream.socket.sio.connected}`);
-                });
-                stream.on('unpipe', function() {
-                    console.log('unpipe');
-                    nodeStream.destroy();
-                });
-            }
-        });
     });
 
 });

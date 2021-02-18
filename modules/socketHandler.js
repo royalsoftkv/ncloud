@@ -1,8 +1,28 @@
 const clientsRegistry = require("../modules/clientsRegistry");
 const moment = require('moment');
 const ss = require('socket.io-stream');
+const IOStream = ss.IOStream
 
-global.storeSocketData = (params) => {
+IOStream.prototype.destroy = function() {
+    // debug('destroy');
+
+    if (this.destroyed) {
+        // debug('already destroyed');
+        return;
+    }
+
+    this.readable = this.writable = false;
+
+    if (this.socket) {
+        // debug('clean up');
+        this.socket.cleanup(this.id);
+        this.socket = null;
+    }
+    this.emit('destroyed')
+    this.destroyed = true;
+};
+
+global.storeSocketData = (params, cb) => {
     console.log(`Received storeSocketData ${JSON.stringify(params)}`)
     let key = params.key
     let value = params.value
@@ -14,6 +34,31 @@ global.storeSocketData = (params) => {
         }
         client.socketData[key]=value
     }
+}
+
+global.getDeviceConnectionInfo = (deviceId, ack) => {
+    let list = [];
+    let client = clientsRegistry.getByDeviceId(deviceId);
+    let res = {};
+    if (client) {
+        res = {
+            device_id: client.handshake.query.device_id,
+            connection_id: client.id,
+            pid_id: client.handshake.query.pid,
+            connectedTime: moment(new Date(client.handshake.time)).toISOString(),
+            status: client.connected,
+            version: client.handshake.query.version,
+            socketData: client.socketData
+        };
+    }
+    console.log('requested getDeviceConnectionInfo',res);
+    ack(res);
+}
+
+global.requestDevicesList = (params, ack) => {
+    console.log('requested DevicesList');
+    let list = clientsRegistry.getClientsList();
+    ack(list);
 }
 
 function processLocalMethod(fndata, ack) {
@@ -43,14 +88,10 @@ function processLocalMethod(fndata, ack) {
             }
         });
     } else {
-        let res;
         try {
-            res = fn(params);
+            fn(params, ack);
         } catch(e) {
-            res = {error:{message:e.message, stack:e.stack, code:'DEVICE_METHOD_ERROR'}};
-        }
-        if(typeof ack === 'function') {
-            ack(res);
+            console.log({error:{message:e.message, stack:e.stack, code:'DEVICE_METHOD_ERROR'}})
         }
     }
 }
@@ -88,38 +129,15 @@ function checkManualAck(socket, msg, ack) {
             callbackId: callbackId,
             payload: res
         };
-        socket.emit('requestDeviceMethod',msgAck);
+        socket.emit('execNodeMethod',msgAck);
     };
     return ack;
 }
 
 module.exports = (socket) => {
 
-    socket.on('requestDevicesList', function (ack) {
-        console.log('requested DevicesList');
-        let list = clientsRegistry.getClientsList();
-        ack(list);
-    });
-
-    socket.on('getDeviceConnectionInfo', function (deviceId, ack) {
-        console.log('requested getDeviceConnectionInfo');
-        let list = [];
-        let client = clientsRegistry.getByDeviceId(deviceId);
-        let res = {};
-        if (client) {
-            res = {
-                device_id: client.handshake.query.device_id,
-                connection_id: client.id,
-                pid_id: client.handshake.query.pid,
-                connectedTime: moment(new Date(client.handshake.time)).toISOString(),
-                status: client.connected
-            };
-        }
-        ack(res);
-    });
-
-    socket.on('requestDeviceMethod', function (params, ack) {
-        console.log(`Received requestDeviceMethod ${JSON.stringify(params)}`);
+    socket.on('execNodeMethod', function (params, ack) {
+        console.log(`Received execNodeMethod ${JSON.stringify(params)}`);
         ack = checkManualAck(socket,params,ack);
         let method = params.method;
         let deviceId = params.to;
@@ -136,19 +154,24 @@ module.exports = (socket) => {
             return;
         }
         if(typeof ack === "function") {
-            deviceSocket.emit('requestDeviceMethod', method, params.params, (deviceResponse) => {
+            deviceSocket.emit('execNodeMethod', method, params.params, (deviceResponse) => {
                 ack(deviceResponse);
             });
         } else {
             if(deviceSocket.handshake.query.legacy) {
-                deviceSocket.emit('requestDeviceMethod', {method:method, params: params.params});
+                deviceSocket.emit('execNodeMethod', {method:method, params: params.params});
             } else {
-                deviceSocket.emit('requestDeviceMethod', method, params.params);
+                deviceSocket.emit('execNodeMethod', method, params.params);
             }
         }
     });
-    ss(socket).on('requestDeviceStream', (stream, params, ack) => {
-        console.log(`Received requestDeviceStream ${params.method}`);
+
+
+
+
+
+    ss(socket).on('execNodeStream', (stream, params, ack) => {
+        console.log(`Received execNodeStream 123 ${params.method}`);
 
         let method = params.method;
         let deviceId = params.to;
@@ -161,11 +184,10 @@ module.exports = (socket) => {
         let deviceStream = ss.createStream({objectMode:true});
         deviceStream.pipe(stream);
 
-        stream.on('unpipe', function () {
-            console.log('fcstream unpipe');
+        stream.on('destroyed', function () {
+            console.log('fcstream destroyed');
             deviceStream.destroy();
         });
-
 
         let deviceSocket = clientsRegistry.getByDeviceId(deviceId);
         if (!deviceSocket || !deviceSocket.connected) {
@@ -175,7 +197,8 @@ module.exports = (socket) => {
             }
             return;
         }
-        ss(deviceSocket).emit('requestDeviceStream', deviceStream, {
+
+        ss(deviceSocket).emit('execNodeStream', deviceStream, {
             method: method,
             params: params.params
         }, typeof ack === "function" ? function (deviceResponse) {

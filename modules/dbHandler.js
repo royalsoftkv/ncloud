@@ -2,12 +2,14 @@ const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database(process.cwd()+'/database.db');
 
 
-global.storeData = (params) => {
+global.storeData = (params, cb) => {
     let name = params.name
     let property = params.property
     let value = params.value
     db.run(`insert into data (time, name, property, value) values(${Date.now()}, '${name}','${property}','${value}')`,[], (res, err)=>{
-        console.log(res, err)
+        if(typeof cb === 'function') {
+            cb(res, err)
+        }
     });
 }
 
