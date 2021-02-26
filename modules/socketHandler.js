@@ -1,6 +1,7 @@
 const clientsRegistry = require("../modules/clientsRegistry");
 const moment = require('moment');
 const ss = require('socket.io-stream');
+const crypt = require("./crypt")
 const IOStream = ss.IOStream
 
 IOStream.prototype.destroy = function() {
@@ -134,17 +135,38 @@ function checkManualAck(socket, msg, ack) {
     return ack;
 }
 
-module.exports = (socket) => {
+decryptPayload = (socket, payload, keys) => {
+    let legacy = socket.handshake.query.legacy
+    if(legacy) {
+        return payload
+    } else {
+        try {
+            let decrypt = crypt.decrypt(payload, keys.privateKey)
+            return JSON.parse(decrypt)
+        } catch (e) {
+            return false
+        }
+    }
+}
 
-    socket.on('execNodeMethod', function (params, ack) {
-        console.log(`Received execNodeMethod ${JSON.stringify(params)}`);
-        ack = checkManualAck(socket,params,ack);
-        let method = params.method;
-        let deviceId = params.to;
+module.exports = (socket, keys) => {
+
+    socket.on('execNodeMethod', function (payload, ack) {
+
+        let payloadDecrypted = decryptPayload(socket, payload, keys)
+        if(!payloadDecrypted) {
+            if (typeof ack === "function") {
+                ack({error: {message: `Error decrypting method`, status: 'DECRYPT_ERROR'}});
+            }
+        }
+        ack = checkManualAck(socket,payloadDecrypted,ack);
+        let deviceId = payloadDecrypted.to;
         if(!deviceId) {
-            processLocalMethod(params, ack);
+            processLocalMethod(payloadDecrypted, ack);
             return;
         }
+        let method = payloadDecrypted.method;
+        let params = payloadDecrypted.params;
         let deviceSocket = clientsRegistry.getByDeviceId(deviceId);
         if (!deviceSocket || !deviceSocket.connected) {
             console.log(`Not connected device ${deviceId}`);
@@ -153,17 +175,31 @@ module.exports = (socket) => {
             }
             return;
         }
+
+        let cb = null
         if(typeof ack === "function") {
-            deviceSocket.emit('execNodeMethod', method, params.params, (deviceResponse) => {
-                ack(deviceResponse);
-            });
-        } else {
-            if(deviceSocket.handshake.query.legacy) {
-                deviceSocket.emit('execNodeMethod', {method:method, params: params.params});
-            } else {
-                deviceSocket.emit('execNodeMethod', method, params.params);
+            cb = (deviceResponse) => {
+                ack(deviceResponse)
             }
         }
+        let legacy = socket.handshake.query.legacy
+        let newPayload = {method, params, legacy}
+        if(!legacy) {
+            newPayload = crypt.encrypt(JSON.stringify(newPayload), deviceSocket.pubKey)
+        }
+        deviceSocket.emit('execNodeMethod', newPayload, cb);
+
+        // if(typeof ack === "function") {
+        //     deviceSocket.emit('execNodeMethod', method, params.params, (deviceResponse) => {
+        //         ack(deviceResponse);
+        //     });
+        // } else {
+        //     if(deviceSocket.handshake.query.legacy) {
+        //         deviceSocket.emit('execNodeMethod', {method:method, params: params.params});
+        //     } else {
+        //         deviceSocket.emit('execNodeMethod', method, params.params);
+        //     }
+        // }
     });
 
 

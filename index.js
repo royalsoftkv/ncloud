@@ -7,6 +7,7 @@ const config = require('./config.json');
 const socketHandler = require("./modules/socketHandler");
 const clientsRegistry = require("./modules/clientsRegistry");
 const dbHandler = require("./modules/dbHandler");
+const crypt = require("./modules/crypt")
 global.initList = function(params, cb) {
     cb({
         allowedIps: config.allowedIps,
@@ -87,6 +88,12 @@ function checkManualAck(socket, msg, ack) {
     return ack;
 }
 
+let keys
+
+generateKeys = () => {
+    keys = crypt.generateKeys()
+}
+
 server.listen(config.port, config.host, () => {
     const io = sio.listen(server);
     // io.use(acknowledge);
@@ -106,6 +113,18 @@ server.listen(config.port, config.host, () => {
             return;
         }
 
+        if(!socket.handshake.query.pubKey && !socket.handshake.query.legacy) {
+            console.log(`Connectiong without public key - upgrade you nclient-lib on ${socket.handshake.query.deviceId}`);
+            socket.disconnect();
+            return;
+        }
+
+        socket.pubKey = socket.handshake.query.pubKey
+
+        socket.emit("ncloudPubKey", keys.publicKey, ()=>{
+            console.log(`Client received ncloud pubKey`)
+        })
+
         clientsRegistry.add(socket);
         socket.on('disconnect', function () {
             console.log('disconnected client', socket.id);
@@ -118,7 +137,7 @@ server.listen(config.port, config.host, () => {
         socket.on('disconnecting', (reason) => {
             console.log('disconnecting',reason);
         });
-        socketHandler(socket);
+        socketHandler(socket, keys);
 
     });
 
@@ -130,3 +149,5 @@ var serveStatic = require('serve-static');
 connect()
     .use(serveStatic('./public'))
     .listen(8090, () => console.log('File server running on 8090...'));
+
+generateKeys()
