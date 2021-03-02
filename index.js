@@ -8,6 +8,10 @@ const socketHandler = require("./modules/socketHandler");
 const clientsRegistry = require("./modules/clientsRegistry");
 const dbHandler = require("./modules/dbHandler");
 const crypt = require("./modules/crypt")
+const jwt = require('jsonwebtoken')
+const timer = require('long-timeout')
+
+
 global.initList = function(params, cb) {
     cb({
         allowedIps: config.allowedIps,
@@ -91,7 +95,7 @@ function checkManualAck(socket, msg, ack) {
 let keys
 
 generateKeys = () => {
-    keys = crypt.generateKeys()
+    keys = crypt.generateKeys(config.secret)
 }
 
 server.listen(config.port, config.host, () => {
@@ -99,7 +103,8 @@ server.listen(config.port, config.host, () => {
     // io.use(acknowledge);
     console.log("server started");
     io.on('connect', function(socket){
-        console.log('client connected', socket.id,  socket.handshake.query.deviceId);
+        let deviceId = socket.handshake.query.deviceId
+        console.log('client connected', deviceId);
         let address = socket.handshake.address;
         if(config.allowedIps.length > 0) {
             if(!config.allowedIps.includes(address)) {
@@ -113,29 +118,57 @@ server.listen(config.port, config.host, () => {
             return;
         }
 
-        if(!socket.handshake.query.pubKey && !socket.handshake.query.legacy) {
-            console.log(`Connectiong without public key - upgrade you nclient-lib on ${socket.handshake.query.deviceId}`);
-            socket.disconnect();
-            return;
+        // if(!socket.handshake.query.pubKey && !socket.handshake.query.legacy) {
+        //     console.log(`Connectiong without public key - upgrade you nclient-lib on ${socket.handshake.query.deviceId}`);
+        //     socket.disconnect();
+        //     return;
+        // }
+
+        // socket.pubKey = socket.handshake.query.pubKey
+
+
+        let expires = 60 * 1
+        let token = jwt.sign({
+            iss: "ncloud",
+            exp: Date.now()/1000 + expires,
+            sub: "auth",
+            deviceId: deviceId,
+            socketId: socket.id
+        }, {
+            key: keys.privateKey,
+            passphrase: config.secret
+        }, {algorithm: 'RS256'});
+
+        socket.token = token
+        socket.publicKey = keys.publicKey
+
+        let cb = () => {
+            console.log(`Client ${socket.handshake.query.deviceId} received token`)
         }
+        if(socket.handshake.query.legacy) {
+            cb = null
+        }
+        socket.emit("token", {token, publicKey: keys.publicKey}, cb)
 
-        socket.pubKey = socket.handshake.query.pubKey
-
-        socket.emit("ncloudPubKey", keys.publicKey, ()=>{
-            console.log(`Client received ncloud pubKey`)
-        })
+        const expiresIn = expires * 1000
+        console.log(`Set socket expires in ${expiresIn}`)
+        const timeout = timer.setTimeout(() => {
+            console.log(`Disconnecting socket becauyse of expired tken`)
+            socket.disconnect(true)
+        }, expiresIn)
 
         clientsRegistry.add(socket);
         socket.on('disconnect', function () {
-            console.log('disconnected client', socket.id);
+            console.log('disconnected client', deviceId);
+            timer.clearTimeout(timeout)
             clientsRegistry.remove(socket);
         });
         socket.on('error', (error) => {
             clientsRegistry.remove(socket);
-            console.log('error',error);
+            console.log('error on socket ',deviceId, error);
         });
         socket.on('disconnecting', (reason) => {
-            console.log('disconnecting',reason);
+            console.log('disconnecting',deviceId, reason);
         });
         socketHandler(socket, keys);
 

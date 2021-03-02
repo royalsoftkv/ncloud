@@ -2,6 +2,7 @@ const clientsRegistry = require("../modules/clientsRegistry");
 const moment = require('moment');
 const ss = require('socket.io-stream');
 const crypt = require("./crypt")
+const jwt = require('jsonwebtoken')
 const IOStream = ss.IOStream
 
 IOStream.prototype.destroy = function() {
@@ -149,24 +150,79 @@ decryptPayload = (socket, payload, keys) => {
     }
 }
 
+checkToken = (socket, token, keys, ack) => {
+    if(!token) {
+        if (typeof ack === "function") {
+            ack({error: {message: `Missing jwt token in payload`, status: 'MISSING_TOKEN'}});
+            return false
+        }
+    }
+    try {
+        let decoded = jwt.verify(token, keys.publicKey);
+    } catch (e) {
+        if(e.message === "jwt expired") {
+            if (typeof ack === "function") {
+                ack({error: {message: `Error decoding token`, status: 'TOKEN_EXPIRED'}});
+            }
+            // setTimeout(()=>{
+            //     socket.disconnect(true)
+            // },1000)
+        } else {
+            if (typeof ack === "function") {
+                ack({error: {message: `Error decoding token`, status: 'TOKEN_ERROR'}});
+            }
+        }
+        return false
+    }
+    return true
+}
+
 module.exports = (socket, keys) => {
 
     socket.on('execNodeMethod', function (payload, ack) {
 
-        let payloadDecrypted = decryptPayload(socket, payload, keys)
-        if(!payloadDecrypted) {
-            if (typeof ack === "function") {
-                ack({error: {message: `Error decrypting method`, status: 'DECRYPT_ERROR'}});
-            }
+        let token = payload.token
+        // if(!token) {
+        //     if (typeof ack === "function") {
+        //         ack({error: {message: `Missing jwt token in payload`, status: 'MISSING_TOKEN'}});
+        //         return
+        //     }
+        // }
+        //
+        // try {
+        //     let decoded = jwt.verify(token, keys.publicKey);
+        //     console.log(decoded)
+        // } catch (e) {
+        //     if(e.message === "jwt expired") {
+        //         ack({error: {message: `Error decoding token`, status: 'TOKEN_EXPIRED'}});
+        //         setTimeout(()=>{
+        //             socket.disconnect(true)
+        //         },1000)
+        //     } else {
+        //         ack({error: {message: `Error decoding token`, status: 'TOKEN_ERROR'}});
+        //     }
+        //     return
+        //
+        // }
+
+        if(!checkToken(socket, token, keys, ack)) {
+            return
         }
-        ack = checkManualAck(socket,payloadDecrypted,ack);
-        let deviceId = payloadDecrypted.to;
+
+        // let payloadDecrypted = decryptPayload(socket, payload, keys)
+        // if(!payloadDecrypted) {
+        //     if (typeof ack === "function") {
+        //         ack({error: {message: `Error decrypting method`, status: 'DECRYPT_ERROR'}});
+        //     }
+        // }
+        ack = checkManualAck(socket,payload,ack);
+        let deviceId = payload.to;
         if(!deviceId) {
-            processLocalMethod(payloadDecrypted, ack);
+            processLocalMethod(payload, ack);
             return;
         }
-        let method = payloadDecrypted.method;
-        let params = payloadDecrypted.params;
+        let method = payload.method;
+        let params = payload.params;
         let deviceSocket = clientsRegistry.getByDeviceId(deviceId);
         if (!deviceSocket || !deviceSocket.connected) {
             console.log(`Not connected device ${deviceId}`);
@@ -182,12 +238,18 @@ module.exports = (socket, keys) => {
                 ack(deviceResponse)
             }
         }
-        let legacy = socket.handshake.query.legacy
-        let newPayload = {method, params, legacy}
-        if(!legacy) {
-            newPayload = crypt.encrypt(JSON.stringify(newPayload), deviceSocket.pubKey)
-        }
-        deviceSocket.emit('execNodeMethod', newPayload, cb);
+        // let legacy = socket.handshake.query.legacy
+        token = deviceSocket.token
+
+        // if(!checkToken(deviceSocket, token, keys, ack)) {
+        //     return
+        // }
+
+        payload = {method, params, token}
+        // if(!legacy) {
+        //     newPayload = crypt.encrypt(JSON.stringify(newPayload), deviceSocket.pubKey)
+        // }
+        deviceSocket.emit('execNodeMethod', payload, cb);
 
         // if(typeof ack === "function") {
         //     deviceSocket.emit('execNodeMethod', method, params.params, (deviceResponse) => {
@@ -208,6 +270,11 @@ module.exports = (socket, keys) => {
 
     ss(socket).on('execNodeStream', (stream, params, ack) => {
         console.log(`Received execNodeStream 123 ${params.method}`);
+
+        let token = params.token
+        if(!checkToken(socket, token, keys, ack)) {
+            return
+        }
 
         let method = params.method;
         let deviceId = params.to;
@@ -236,7 +303,8 @@ module.exports = (socket, keys) => {
 
         ss(deviceSocket).emit('execNodeStream', deviceStream, {
             method: method,
-            params: params.params
+            params: params.params,
+            token: deviceSocket.token
         }, typeof ack === "function" ? function (deviceResponse) {
             ack(deviceResponse);
         } : null);
