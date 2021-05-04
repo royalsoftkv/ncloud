@@ -99,7 +99,10 @@ generateKeys = () => {
 }
 
 server.listen(config.port, config.host, () => {
-    const io = sio.listen(server);
+    const io = sio.listen(server, {
+        pingInterval: 25000,
+        pingTimeout: 6000
+    });
     // io.use(acknowledge);
     console.log("server started");
     io.on('connect', function(socket){
@@ -127,7 +130,7 @@ server.listen(config.port, config.host, () => {
         // socket.pubKey = socket.handshake.query.pubKey
 
 
-        let expires = 60 * 1
+        let expires = 60 * 60 * 24
         let token = jwt.sign({
             iss: "ncloud",
             exp: Date.now()/1000 + expires,

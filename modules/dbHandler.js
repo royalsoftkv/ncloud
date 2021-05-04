@@ -13,6 +13,18 @@ global.storeData = (params, cb) => {
     });
 }
 
+global.getData = async (params) => {
+    let name = params.name
+    let property = params.property
+    let sql = `select * from data where name= ? and property = ? limit 1`
+    let sqlParams = [name, property]
+    return await new Promise(resolve => {
+        db.all(sql, sqlParams, (err, rows) => {
+            resolve(rows[0].value)
+        })
+    })
+}
+
 global.readData = async (params) => {
     let name = params.name
     let property = params.property

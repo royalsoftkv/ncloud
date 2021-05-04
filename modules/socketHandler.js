@@ -164,9 +164,6 @@ checkToken = (socket, token, keys, ack) => {
             if (typeof ack === "function") {
                 ack({error: {message: `Error decoding token`, status: 'TOKEN_EXPIRED'}});
             }
-            // setTimeout(()=>{
-            //     socket.disconnect(true)
-            // },1000)
         } else {
             if (typeof ack === "function") {
                 ack({error: {message: `Error decoding token`, status: 'TOKEN_ERROR'}});
@@ -240,11 +237,6 @@ module.exports = (socket, keys) => {
         }
         // let legacy = socket.handshake.query.legacy
         token = deviceSocket.token
-
-        // if(!checkToken(deviceSocket, token, keys, ack)) {
-        //     return
-        // }
-
         payload = {method, params, token}
         // if(!legacy) {
         //     newPayload = crypt.encrypt(JSON.stringify(newPayload), deviceSocket.pubKey)
