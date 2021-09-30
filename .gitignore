@@ -6,3 +6,5 @@
 /.idea/
 /ncloud-1.0.5.tgz
 /tsam.txt
+/gen_keys.js
+/pubkey.pem
