@@ -162,11 +162,11 @@ checkToken = (socket, token, keys, ack) => {
     } catch (e) {
         if(e.message === "jwt expired") {
             if (typeof ack === "function") {
-                ack({error: {message: `Error decoding token`, status: 'TOKEN_EXPIRED'}});
+                ack({error: {message: `Error decoding token`, status: 'TOKEN_EXPIRED', details: e.message}});
             }
         } else {
             if (typeof ack === "function") {
-                ack({error: {message: `Error decoding token`, status: 'TOKEN_ERROR'}});
+                ack({error: {message: `Error decoding token`, status: 'TOKEN_ERROR', details: e.message}});
             }
         }
         return false
@@ -288,7 +288,7 @@ module.exports = (socket, keys) => {
         if (!deviceSocket || !deviceSocket.connected) {
             console.log(`Not connected device ${deviceId}`);
             if (typeof ack === "function") {
-                ack();
+                ack({error: {message: `Not connected device ${deviceId}`, status: 'DEVICE_NOT_CONNECTED'}});
             }
             return;
         }

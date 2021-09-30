@@ -10,6 +10,7 @@ const dbHandler = require("./modules/dbHandler");
 const crypt = require("./modules/crypt")
 const jwt = require('jsonwebtoken')
 const timer = require('long-timeout')
+const fs = require('fs')
 
 
 global.initList = function(params, cb) {
@@ -98,18 +99,43 @@ generateKeys = () => {
     keys = crypt.generateKeys(config.secret)
 }
 
+const cert = fs.readFileSync('pubkey.pem');
+
 server.listen(config.port, config.host, () => {
     const io = sio.listen(server, {
         pingInterval: 25000,
         pingTimeout: 6000
     });
+
+    io.use((socket, next) => {
+        let token = socket.handshake.query.token;
+        if (token) {
+            jwt.verify(token,
+                cert, {
+                    algorithms: ['RS256']
+                }, function (err, decoded) {
+                    if (err) {
+                        console.log(`Error decoding the token for device ${socket.handshake.query.deviceId}`, err);
+                        return next(new Error('Authentication error'));
+                    }
+                    console.log(`Verified token for device ${socket.handshake.query.deviceId}`)
+                    next();
+                });
+        } else {
+            console.log('No token is inside the request', socket.handshake.headers);
+            next(new Error('Authentication error'));
+        }
+    })
+
+
+
     // io.use(acknowledge);
     console.log("server started");
     io.on('connect', function(socket){
         let deviceId = socket.handshake.query.deviceId
         console.log('client connected', deviceId);
         let address = socket.handshake.address;
-        if(config.allowedIps.length > 0) {
+        if(config.allowedIps.length > 0 && false) {
             if(!config.allowedIps.includes(address)) {
                 console.warn(`Not allowed access for ip: ${address}`);
                 return;
@@ -120,7 +146,7 @@ server.listen(config.port, config.host, () => {
             socket.disconnect();
             return;
         }
-
+        // console.log(`Client token = ${socket.handshake.query.token}`)
         // if(!socket.handshake.query.pubKey && !socket.handshake.query.legacy) {
         //     console.log(`Connectiong without public key - upgrade you nclient-lib on ${socket.handshake.query.deviceId}`);
         //     socket.disconnect();
