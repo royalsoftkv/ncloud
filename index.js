@@ -135,9 +135,9 @@ server.listen(config.port, config.host, () => {
         let deviceId = socket.handshake.query.deviceId
         console.log('client connected', deviceId);
         let address = socket.handshake.address;
-        if(config.allowedIps.length > 0 && false) {
+        if(config.allowedIps.length > 0 && config.restirctIps) {
             if(!config.allowedIps.includes(address)) {
-                console.warn(`Not allowed access for ip: ${address}`);
+                console.warn(`Not allowed access for ip: ${address} device=${deviceId}`);
                 return;
             }
         }
@@ -176,6 +176,10 @@ server.listen(config.port, config.host, () => {
         }
         if(socket.handshake.query.legacy) {
             cb = null
+        }
+        let manualAck = socket.handshake.query.manualAck
+        if(manualAck) {
+            socket.ackIds = {}
         }
         socket.emit("token", {token, publicKey: keys.publicKey}, cb)
 

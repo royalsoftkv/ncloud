@@ -119,20 +119,22 @@ function processLocalStream(stream, fndata, ack) {
 }
 
 function checkManualAck(socket, msg, ack) {
-    if(!msg.callbackId) {
-        return ack;
-    }
-    let callbackId = msg.callbackId;
-    ack=function(res){
-        let msgAck = {
-            from: msg.to,
-            to: msg.from,
-            method: 'callbackMethod',
-            callbackId: callbackId,
-            payload: res
+    if(msg.callback) {
+        ack=function(res){
+            socket.emit(msg.callback,res);
         };
-        socket.emit('execNodeMethod',msgAck);
-    };
+    } else if (msg.callbackId) {
+        ack=function(res) {
+            let msgAck = {
+                from: msg.to,
+                to: msg.from,
+                method: 'callbackMethod',
+                callbackId: msg.callbackId,
+                payload: res
+            };
+            socket.emit('execNodeMethod', msgAck);
+        }
+    }
     return ack;
 }
 
@@ -175,6 +177,19 @@ checkToken = (socket, token, keys, ack) => {
 }
 
 module.exports = (socket, keys) => {
+
+    socket.on('ackResponse', function (payload) {
+        let token = payload.token
+        let deviceId = payload.from;
+        if(!checkToken(socket, token, keys)) {
+            return
+        }
+        let deviceSocket = clientsRegistry.getByDeviceId(deviceId);
+        console.log(payload)
+        let ackId = payload.ackId
+        let ack = deviceSocket.ackIds[ackId]
+        ack(payload.response)
+    })
 
     socket.on('execNodeMethod', function (payload, ack) {
 
@@ -220,6 +235,7 @@ module.exports = (socket, keys) => {
         }
         let method = payload.method;
         let params = payload.params;
+        let from = payload.from;
         let deviceSocket = clientsRegistry.getByDeviceId(deviceId);
         if (!deviceSocket || !deviceSocket.connected) {
             console.log(`Not connected device ${deviceId}`);
@@ -237,10 +253,18 @@ module.exports = (socket, keys) => {
         }
         // let legacy = socket.handshake.query.legacy
         token = deviceSocket.token
-        payload = {method, params, token}
         // if(!legacy) {
         //     newPayload = crypt.encrypt(JSON.stringify(newPayload), deviceSocket.pubKey)
         // }
+
+        payload = {method, params, token}
+        let manualAck = deviceSocket.handshake.query.manualAck
+        if(manualAck) {
+            payload.from = from
+            payload.ackId = (Math.random() + 1).toString(36).substring(7);
+            deviceSocket.ackIds[payload.ackId] = ack
+        }
+
         deviceSocket.emit('execNodeMethod', payload, cb);
 
         // if(typeof ack === "function") {
